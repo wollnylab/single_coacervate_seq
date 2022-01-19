@@ -1,0 +1,68 @@
+---
+title: "Figure S2 - Draft"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+options(width = 12)
+```
+
+```{r}
+# Prior to this script: run 'meme_parser_prob_mat.py' to get input files
+# great vignette for ggseqlogo found on: https://omarwagih.github.io/ggseqlogo/
+
+# Setup
+library(tidyverse)
+library(ggseqlogo)
+theme_set(theme_classic(base_size=24))
+
+# function to format parsed meme output
+get_in_shape <- function(file){
+  the_data <- read.table(file = file, sep = " ", skip = 1)
+  mat <- rbind(the_data$V2,the_data$V4, the_data$V6, the_data$V8)
+  rownames(mat) <- c("A", "C", "G", "T")
+  return(mat)
+}
+```
+
+### Motifs of enriched transcripts
+
+```{r, fig.height=12}
+# set wd for motifs of enriched transcripts
+setwd("/Users/damian_wollny/PD/Data/OoL/18.2_integrative_analysis/_1_comparison/_even_newer_meme_analysis/_ave_pdda_coac/_meme_output/resids/ggseqlogo/")
+
+# load all motif_*.txt files and apply the get_in_shape function
+mat_list <- lapply(Sys.glob("motif_*.txt"), get_in_shape)
+
+# correct mat_list order and rename
+mat_list <- mat_list[c(1,3,4,5,6,7,8,9,10,2)]
+names(mat_list) <- paste("Motif:", c(1:10))
+
+# Generate sequence logo
+ggseqlogo(mat_list, method = "bits", font = "helvetica_regular", ncol = 1)
+```
+
+### Motifs of random transcripts
+
+```{r, fig.height=12}
+# set wd for motifs of enriched transcripts
+setwd("/Users/damian_wollny/PD/Data/OoL/18.2_integrative_analysis/_1_comparison/_even_newer_meme_analysis/_ave_pdda_coac/_meme_output/_random_transcripts/resids/ggseqlogo")
+
+# load all motif_*.txt files and apply the get_in_shape function
+mat_list <- lapply(Sys.glob("motif_*.txt"), get_in_shape)
+
+# correct mat_list order and rename
+mat_list <- mat_list[c(1,3,4,5,6,7,8,9,10,2)]
+names(mat_list) <- paste("Motif:", c(1:10))
+
+# Generate sequence logo
+ggseqlogo(mat_list, method = "bits", font = "helvetica_regular", ncol = 1)
+```
