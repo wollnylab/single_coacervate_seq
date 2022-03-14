@@ -1,0 +1,11 @@
+~/meme/bin/meme /Users/damian_wollny/PD/Data/OoL/18.2_integrative_analysis/_1_comparison/_even_newer_meme_analysis/_ave_pdda_coac/_meme_input/_random_transcripts/pdda_resids_filter_seqs.txt \
+-dna \
+-o /Users/damian_wollny/PD/Data/OoL/18.2_integrative_analysis/_1_comparison/_even_newer_meme_analysis/_ave_pdda_coac/_meme_output/_random_transcripts/resids \
+-time 18000 \
+-mod anr \
+-nmotifs 10 \
+-minw 6 \
+-maxw 50 \
+-objfun classic \
+-markov_order 2 \
+-bfile /Users/damian_wollny/PD/Data/OoL/18.2_integrative_analysis/_1_comparison/_even_newer_meme_analysis/_pdda_coac/_meme_input/pdda_background_model.txt

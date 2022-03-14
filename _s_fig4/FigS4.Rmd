@@ -1,0 +1,101 @@
+---
+title: "Supplementary Figure 4"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+
+theme_set(theme_classic(base_size=24))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+## Figure S4
+
+```{r}
+# read seq data
+master <- readRDS(file = "/Users/damian_wollny/PD/Data/OoL/19.1_Draft_2/Generate_input/draft2_input.RDS")
+
+#
+# ---- OOL17 Data ------------------------------------
+#
+
+# all coacervate rnas
+ool17_all_coac_rnas <- master %>%  
+  filter(experiment == "ool17") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(num_coac = n()) %>% 
+  mutate(perc_coac = num_coac/max(num_coac)*100) %>% 
+  arrange(desc(num_coac))
+
+# input rnas + their presence in x # of coacervates
+ool17_all_input_rnas <- master %>% 
+  filter(experiment == "ool17_input") %>% 
+  filter(tpm != 0) %>% 
+  left_join(.,ool17_all_coac_rnas, by = "target_id") %>% 
+  mutate(num_coac = replace_na(num_coac,0)) %>% 
+  dplyr::select(target_id, num_coac, perc_coac) %>% 
+  arrange(desc(num_coac)) 
+
+ool17_input_plot <- ool17_all_input_rnas %>% left_join(.,master %>% filter(experiment == "ool17_input") %>% select(length, target_id, log2_tpm), by = "target_id") %>% distinct() %>% mutate(dataset = "Experiment 1") %>% mutate(in_condensates = "Yes")
+ool17_input_zero <- ool17_all_input_rnas %>% filter(num_coac == 0) %>% left_join(.,master %>% filter(experiment == "ool17_input") %>% select(length, target_id, log2_tpm), by = "target_id") %>% distinct() %>% mutate(dataset = "Experiment 1") %>% mutate(in_condensates = "No")
+
+
+#
+# ---- OOL18 Data ------------------------------------
+#
+
+# all coacervate rnas
+ool18_all_coac_rnas <- master %>%  
+  filter(experiment == "ool18") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(num_coac = n()) %>% 
+  mutate(perc_coac = num_coac/max(num_coac)*100) %>% 
+  arrange(desc(num_coac))
+
+# input rnas + their presence in x # of coacervates
+ool18_all_input_rnas <- master %>% 
+  filter(experiment == "ool18_input") %>% 
+  filter(tpm != 0) %>% 
+  left_join(.,ool18_all_coac_rnas, by = "target_id") %>% 
+  mutate(num_coac = replace_na(num_coac,0)) %>% 
+  dplyr::select(target_id, num_coac, perc_coac) %>% 
+  arrange(desc(num_coac)) 
+
+ool18_input_plot <- ool18_all_input_rnas %>% left_join(.,master %>% filter(experiment == "ool18_input") %>% select(length, target_id, log2_tpm), by = "target_id") %>% distinct() %>% mutate(dataset = "Experiment 2") %>% mutate(in_condensates = "Yes")
+ool18_input_zero <- ool18_all_input_rnas %>% filter(num_coac == 0) %>% left_join(.,master %>% filter(experiment == "ool18_input") %>% select(length, target_id, log2_tpm), by = "target_id") %>% distinct() %>% mutate(dataset = "Experiment 2") %>% mutate(in_condensates = "No")
+
+# --- combine datasets --- 
+s_fig1d <- bind_rows(ool17_input_plot, ool17_input_zero, ool18_input_plot, ool18_input_zero)
+
+# --- plot --- 
+s_fig1d_plot <- ggplot(data = s_fig1d) +
+  geom_boxplot(aes(x = dataset, y = log2_tpm, color = in_condensates)) +
+  facet_grid(. ~ dataset, scales = "free_x") +
+  scale_color_manual(values =  c("darkgrey", "#9E0142")) + 
+  labs(y = "Input RNA: log2(TPM)") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.line.x = element_blank(), axis.title.x = element_blank(),
+        legend.title = element_text(size = 18)) +
+  labs(color = "Found in\nCondensates?")
+s_fig1d_plot
+```

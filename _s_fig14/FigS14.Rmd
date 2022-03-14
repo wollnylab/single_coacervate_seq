@@ -1,0 +1,273 @@
+---
+title: "Supplementary Figure 14"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+Prior to this script: run 'meme_parser_prob_mat.py' to parse MEME input files for this script
+
+```{r}
+# Setup
+library(tidyverse)
+library(mgcv)
+library(ggseqlogo)
+library(ggplot2)
+library(cowplot)
+library(venn)
+```
+
+## Figure S14a
+
+```{r, fig.height=12}
+# function to format parsed meme output
+get_in_shape <- function(file){
+  the_data <- read.table(file = file, sep = " ", skip = 1)
+  mat <- rbind(the_data$V2,the_data$V4, the_data$V6, the_data$V8)
+  rownames(mat) <- c("A", "C", "G", "T")
+  return(mat)
+}
+
+### ------ Lysine data ------ ###
+# load all motif_*.txt files and apply the get_in_shape function
+mat_list <- lapply(Sys.glob("./_lys/motif_*.txt"), get_in_shape)
+
+# correct mat_list order and rename
+mat_list <- mat_list[c(1,3,4,5,6,7,8,9,10,2)]
+names(mat_list) <- paste("Motif:", c(1:10))
+
+# Generate sequence logo
+ggseqlogo(mat_list, method = "bits", font = "helvetica_regular", ncol = 1) + theme(strip.text.x = element_text(size=22))
+
+### ------ FUS data ------ ###
+
+# load all motif_*.txt files and apply the get_in_shape function
+mat_list <- lapply(Sys.glob("./_fus/motif_*.txt"), get_in_shape)
+
+# correct mat_list order and rename
+mat_list <- mat_list[c(1,3,4,5,6,7,8,9,10,2)]
+names(mat_list) <- paste("Motif:", c(1:10))
+
+# Generate sequence logo
+ggseqlogo(mat_list, method = "bits", font = "helvetica_regular", ncol = 1) + theme(strip.text.x = element_text(size=22)) 
+
+### ------ Dhh1 data ------ ###
+
+# load all motif_*.txt files and apply the get_in_shape function
+mat_list <- lapply(Sys.glob("./_dhh1/motif_*.txt"), get_in_shape)
+
+# correct mat_list order and rename
+mat_list <- mat_list[c(1,3,4,5,6,7,8,9,10,2)]
+names(mat_list) <- paste("Motif:", c(1:10))
+
+# Generate sequence logo
+ggseqlogo(mat_list, method = "bits", font = "helvetica_regular", ncol = 1) + theme(strip.text.x = element_text(size=22)) 
+```
+
+## Figure S14b
+
+```{r}
+### Load data that include read coverage cutoff
+master <- readRDS(file = "../_fig4/master_cov_cutoff.RDS")
+
+###################################
+# ---- DATA FROM FUS DROPLETS --- #
+###################################
+
+fus_input_tpm <- master %>%
+  filter(experiment == "ool22_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(fus_input_tpm = log2_tpm)
+
+fus_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool22") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,fus_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+fus_bens_plot_model <- gam(percent ~ s(fus_input_tpm, bs = "cs"), data = fus_bens_plot)
+fus_bens_plot <- fus_bens_plot %>% mutate(residuals = fus_bens_plot_model$residuals) %>% mutate(droplet_type = "fus")
+
+
+####################################
+# ---- DATA FROM DHH1 DROPLETS --- #
+####################################
+
+dhh1_input_tpm <- master %>%
+  filter(experiment == "ool24_2_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(dhh1_input_tpm = log2_tpm)
+
+dhh1_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool24_2") %>% 
+  filter(rel_coverage >= 0.2) %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,dhh1_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+dhh1_bens_plot_model <- gam(percent ~ s(dhh1_input_tpm, bs = "cs"), data = dhh1_bens_plot)
+dhh1_bens_plot <- dhh1_bens_plot %>% mutate(residuals = dhh1_bens_plot_model$residuals) %>% mutate(droplet_type = "dhh1")
+
+######################################
+# ---- DATA FROM LYS COACERVATES --- #
+######################################
+
+ool12_input_tpm <- master %>%
+  filter(experiment == "ool12_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(ool12_input_tpm = log2_tpm)
+
+ool12_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool12") %>% 
+  filter(rel_coverage >= 0.2) %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,ool12_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+ool12_bens_plot_model <- gam(percent ~ s(ool12_input_tpm, bs = "cs"), data = ool12_bens_plot)
+ool12_bens_plot <- ool12_bens_plot %>% mutate(residuals = ool12_bens_plot_model$residuals) %>% mutate(droplet_type = "lys")
+
+#######################################
+# ---- DATA FROM PDDA COACERVATES --- #
+#######################################
+
+# --- OOL17 replicate ------------------
+
+ool17_input_tpm <- master %>%
+  filter(experiment == "ool17_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(ool17_input_tpm = log2_tpm)
+
+ool17_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool17") %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  left_join(ool17_input_tpm, ., by="target_id") %>% 
+  mutate(count = replace(count, which(is.na(count)), 0)) %>% # include all transcripts that are found in 0 coac
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+ool17_bens_plot_model <- gam(percent ~ s(ool17_input_tpm, bs = "cs"), data = ool17_bens_plot)
+ool17_bens_plot <- ool17_bens_plot %>% mutate(residuals = ool17_bens_plot_model$residuals) %>% mutate(droplet_type = "pdda_1")
+
+# --- OOL18 replicate ------------------
+
+ool18_input_tpm <- master %>%
+  filter(experiment == "ool18_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(ool18_input_tpm = log2_tpm)
+
+ool18_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool18") %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  left_join(ool18_input_tpm, ., by="target_id") %>% 
+  mutate(count = replace(count, which(is.na(count)), 0)) %>% # include all transcripts that are found in 0 coac
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+ool18_bens_plot_model <- gam(percent ~ s(ool18_input_tpm, bs = "cs"), data = ool18_bens_plot)
+ool18_bens_plot <- ool18_bens_plot %>% mutate(residuals = ool18_bens_plot_model$residuals) %>% mutate(droplet_type = "pdda_2")
+
+# --- Ave ------------------
+
+# Filter all transcripts that are present in both replicate experiments
+ave_bens_plot <- inner_join(ool17_bens_plot, ool18_bens_plot, by = "target_id")
+
+# Calc ave(input_tpm) and ave(percent) for each transcript
+ave_bens_plot <- ave_bens_plot %>% 
+  mutate(input_tpm = (ool18_input_tpm+ool17_input_tpm)/2) %>% 
+  mutate(percent = (percent.x+percent.y)/2) %>% 
+  select(target_id, input_tpm, percent) 
+
+# get residuals from model describing data in bens_plot
+ave_bens_plot_model <- gam(percent ~ s(input_tpm, bs = "cs"), data = ave_bens_plot)
+ave_bens_plot <- ave_bens_plot %>% mutate(residuals = ave_bens_plot_model$residuals)
+
+
+# PDDA
+venn_pdda <- ave_bens_plot %>% 
+  filter(residuals > 30) %>% dplyr::select(target_id) %>% pull()
+# LYS
+venn_lys <- ool12_bens_plot %>% 
+  filter(residuals > 30) %>% dplyr::select(target_id) %>% pull()
+# Dhh1
+venn_dhh1 <- dhh1_bens_plot %>% 
+  filter(residuals > 30) %>% dplyr::select(target_id) %>% pull()
+# FUS
+venn_fus <- fus_bens_plot %>% 
+  filter(residuals > 30) %>% dplyr::select(target_id) %>% pull()
+
+# input for venn
+venn_input <- list(venn_pdda, venn_lys, venn_dhh1, venn_fus)
+
+# plot
+venn(venn_input, 
+     snames = c("PDDA", "LYS", "Dhh1", "FUS"), 
+     zcolor = c("#0671B0", "#92C5DE", "#CA1C20", "#F4A582"), 
+     opacity = .7, 
+     sncs = 2,
+     ilcs = 1.6,
+     box = F)
+```
+
+
+## Figure S14c
+
+```{r}
+lysine <- get_in_shape("./_lys/motif_4.txt")
+dhh1 <- get_in_shape("./_dhh1/motif_1.txt")
+fus <- get_in_shape("./_fus/motif_1.txt")
+pdda <- get_in_shape("./_pdda/motif_1.txt")
+
+pdda_plot <- ggseqlogo(pdda, method = "bits", font = "helvetica_regular", ncol = 1) +
+  annotate('rect', xmin = 6.5, xmax = 48.5, ymin = -0.05, ymax = 2.2, alpha = .1, col='black', fill='yellow') +
+  labs(title = "PDDA")
+fus_plot <- ggseqlogo(fus, method = "bits", font = "helvetica_regular", ncol = 1) +
+  annotate('rect', xmin = 0.5, xmax = 45.5, ymin = -0.05, ymax = 2.2, alpha = .1, col='black', fill='yellow') +
+  labs(title = "FUS")
+dhh1_plot <- ggseqlogo(dhh1, method = "bits", font = "helvetica_regular", ncol = 1) +
+  annotate('rect', xmin = 16.5, xmax = 48.5, ymin = -0.05, ymax = 2.2, alpha = .1, col='black', fill='yellow') +
+  labs(title = "Dhh1")
+lysine_plot <- ggseqlogo(lysine, method = "bits", font = "helvetica_regular", ncol = 1) +
+  annotate('rect', xmin = 20.5, xmax = 45.5, ymin = -0.05, ymax = 2.2, alpha = .1, col='black', fill='yellow') +
+  labs(title = "Lysine")
+
+plot_grid(pdda_plot,fus_plot, dhh1_plot, lysine_plot, ncol = 1)
+```
+

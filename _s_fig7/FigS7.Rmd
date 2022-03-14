@@ -1,0 +1,166 @@
+---
+title: "Supplementary Figure 7"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+library(cowplot)
+
+theme_set(theme_classic(base_size=24))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r}
+# Load seq data
+master <- readRDS(file = "../_input/coacervate_data.RDS")
+```
+
+## Figure S7a
+
+```{r}
+# compare number of genes detected in input vs all coacervates 
+a.0 <- master %>% 
+  filter(experiment == "ool12") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n(), experi = experiment[1])
+
+a.1 <- master %>% 
+  filter(experiment == "ool12_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n(), experi = experiment[1])
+
+df <- data.frame(c("coacervate_rna", "input_rna"),
+                 c(a.0 %>% nrow(),
+                   a.1 %>% nrow()))
+colnames(df) <- c("what", "transcript_number")
+
+# subsample ool12 so that ool12_input & ool12 contain the same number of genes
+a <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool12") %>% 
+  group_by(target_id) %>% 
+  summarise(experi = dplyr::first(experiment), count = n()) %>% 
+  inner_join(.,master %>% select(length, target_id), by="target_id") %>% distinct() %>% 
+  sample_n(df$transcript_number[2])
+
+b <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool12_input") %>% 
+  group_by(target_id) %>% 
+  summarise(experi = dplyr::first(experiment), count = n()) %>% 
+  inner_join(.,master %>% select(length, target_id), by="target_id") %>% distinct() 
+
+ab <- bind_rows(a, b)
+
+# extract vectors of length distributions to be compared 
+input_length_vals <- ab %>% filter(experi == "ool12_input") %>% pull(length)
+ool12_length_vals <- ab %>% filter(experi == "ool12") %>% pull(length)
+
+# New facet label names for the plot below
+experi.labs <- c("Condensates", "Input RNA")
+names(experi.labs) <- c("ool12", "ool12_input")
+
+# plot distributions 
+s1 <- ggplot(data = ab, aes(length)) +
+  geom_histogram(colour = "black", fill = "white", bins = 60) +
+  facet_grid(. ~ experi, scales = "free_y", labeller = labeller(experi = experi.labs)) +
+  scale_x_continuous(trans = "log10") +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+plot(s1)
+
+```
+
+## Figure 7b
+
+```{r}
+# exemplified for ool18
+pdda_input <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool18_input") %>% 
+  mutate(bin = ntile(tpm, 100)) %>% 
+  group_by(target_id) %>% 
+  summarise(input_tpm = log2_tpm, bin = bin)
+
+pdda_ool18 <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool18") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n(), length = length[1]) %>% 
+  inner_join(.,pdda_input, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+
+# plot correlation length vs percent
+plot1 <- pdda_ool18 %>% 
+  ggplot(aes(x = length, y = percent)) +
+  geom_point(pch=21, fill = "grey") +
+  scale_x_log10() +
+  annotate(
+           geom = "text",
+           label = paste("r = ", round(cor(pdda_ool18$percent, pdda_ool18$length, method = "pearson"), 2), sep = ""),
+           x = 180, y = 70, size = 7, color = "red"
+           ) +
+  geom_smooth() +
+  labs(x = "Transcript length\n[bp]", y = "Detected in x\ncoacervates [%]")
+plot1
+```
+
+## Figure S7c
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./FigS7c.png")
+plot(a_scheme)
+```
+
+## Figure S7d
+
+```{r}
+df <- data.frame(pearson = as.numeric(), 
+             bin = as.numeric()) 
+
+for (i in c(1:100)){
+   test <- pdda_ool18 %>% 
+  filter(bin == i) %>% 
+  select(percent, length)
+
+  pear <- cor(test$percent, test$length, method = "pearson")
+
+  df[i,c(1:2)] <- c(pear, i)
+}
+
+plot2 <- df %>% 
+  ggplot(aes(x = bin, y = pearson)) +
+  geom_line() +
+  geom_hline(yintercept = cor(pdda_ool18$percent, pdda_ool18$length, method = "pearson"),
+             linetype = 2,
+             color = "red") +
+  annotate(
+         geom = "text",
+         label = paste("r = ", round(cor(pdda_ool18$percent, pdda_ool18$length, method = "pearson"), 2), sep = ""),
+         x = 23, y = 0.04, size = 7, color = "red"
+         ) +
+  labs(x = "Input TPM bins", y = "Pearson's correlation", title = "RNA length <-> Detected in x coacervates [%]")
+plot2 
+```
+

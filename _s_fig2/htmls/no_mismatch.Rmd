@@ -1,0 +1,87 @@
+---
+title: "Mouse_droplet with strict indices"
+output:
+  html_document: 
+    code_folding: hide
+---
+  
+  # Load packages
+  * required - "biomaRt", "dplyr", "DT"
+```{r, message=FALSE}
+library(biomaRt)
+library(dplyr)
+library(DT)
+```
+
+# Load data
+* output of the software "RSEM" - RSEM requires STAR to map to transcriptome and outputs 2 different tables (for gene-level & transcript-level counts). Here I used gene-level count output
+```{r, loading}
+droplet_paired <- read.delim("C:/Users/arams/Desktop/rsem/droplet.genes.results")
+input_paired<-read.delim("C:/Users/arams/Desktop/rsem/input.genes.results")
+neg_paired<-read.delim("C:/Users/arams/Desktop/rsem/neg.genes.results")
+```
+
+# Get biotype information
+* get gene ids; remove version number (dot and after) - as they do not contain any useful information and make it hard for the package to properly identify them
+* this step requires internet access
+```{r, biomart}
+#get gene ids and remov eversion number
+droplet_paired_genes<-droplet_paired$gene_id
+droplet_paired_genes_clean<-gsub("\\..*","",droplet_paired_genes)
+droplet_paired$clean_gene_id<-droplet_paired_genes_clean
+input_paired_genes<-input_paired$gene_id
+input_paired_genes_clean<-gsub("\\..*","",input_paired_genes)
+input_paired$clean_gene_id<-input_paired_genes_clean
+neg_paired_genes<-neg_paired$gene_id
+neg_paired_genes_clean<-gsub("\\..*","",neg_paired_genes)
+neg_paired$clean_gene_id<-neg_paired_genes_clean
+#get biotype information
+mart <- useDataset("mmusculus_gene_ensembl", useMart("ensembl"))
+biotype <- getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id", "gene_biotype"), values = droplet_paired_genes_clean, mart= mart)
+```
+
+# Table generation
+* merge biotytpe information with main tables
+* filter TPM>=1
+* generate tables
+
+```{r, merge}
+#merge
+droplet_paired_merge<-merge(droplet_paired, biotype, by.y="ensembl_gene_id", by.x="clean_gene_id")
+input_paired_merge<-merge(input_paired, biotype, by.y="ensembl_gene_id", by.x="clean_gene_id")
+neg_paired_merge<-merge(neg_paired, biotype, by.y="ensembl_gene_id", by.x="clean_gene_id")
+#filter
+droplet_paired_filt<-droplet_paired_merge[droplet_paired_merge$TPM>=1, ]
+input_paired_filt<-input_paired_merge[input_paired_merge$TPM>=1, ]
+neg_paired_filt<-neg_paired_merge[neg_paired_merge$TPM>=1, ]
+#generate tables about detected biotype number
+droplet_paired_sum<-droplet_paired_filt %>% group_by(gene_biotype) %>% summarise(n_droplet_paired = n())
+input_paired_sum<-input_paired_filt %>% group_by(gene_biotype) %>% summarise(n_input_paired = n())
+neg_paired_sum<-neg_paired_filt %>% group_by(gene_biotype) %>% summarise(n_neg_paired = n())
+#merge generated tables
+paired_merge<-merge(droplet_paired_sum, input_paired_sum, by.x="gene_biotype", by.y="gene_biotype", all=TRUE)
+paired_merge<-merge(paired_merge, neg_paired_sum, by.x="gene_biotype", by.y="gene_biotype", all=TRUE)
+names(paired_merge)<-c("Biotype", "n_droplet_paired", "n_input_paired", "n_neg_paired")
+#generate tables about summed TPM by biotype
+droplet_paired_sum_TPM<-aggregate(droplet_paired_filt$TPM, by=list(Category=droplet_paired_filt$gene_biotype), FUN=sum)
+input_paired_sum_TPM<-aggregate(input_paired_filt$TPM, by=list(Category=input_paired_filt$gene_biotype), FUN=sum)
+neg_paired_sum_TPM<-aggregate(neg_paired_filt$TPM, by=list(Category=neg_paired_filt$gene_biotype), FUN=sum)
+#merge generated tables
+paired_merge_TPM<-merge(droplet_paired_sum_TPM, input_paired_sum_TPM, by.x="Category", by.y="Category", all=TRUE)
+paired_merge_TPM<-merge(paired_merge_TPM, neg_paired_sum_TPM,  by.x="Category", by.y="Category", all=TRUE)
+names(paired_merge_TPM)<-c("Biotype", "TPM_droplet_paired", "TPM_input_paired",  "TPM_neg_paired")
+```
+
+# Tables of detected (TPM>=1) RNA biotypes 
+```{r, tables_n}
+datatable(paired_merge, caption = "Detected (TPM>=1) RNA biotypes in properly paired data")
+```
+
+# Tables of summed TPM values of detected (TPM>=1) RNA biotypes 
+```{r, tables_tpm}
+datatable(paired_merge_TPM, caption = "Summed TPM values of detected (TPM>=1) RNA biotypes in properly paired data")
+```
+
+```{r}
+sessionInfo()
+```

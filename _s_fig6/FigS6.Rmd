@@ -1,0 +1,143 @@
+---
+title: "Supplementary Figure 6"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+library(data.table)
+library(mgcv)
+library(seqinr)
+
+theme_set(theme_classic(base_size=22))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r}
+master <- readRDS(file = "../_input/coacervate_data.RDS") %>% as.tbl()
+ool41 <- readRDS(file = "../_input/mef_data.RDS") %>% as.tbl()
+ool41_droplets <- ool41 %>% 
+  as.tbl() %>% 
+  filter(grepl(pattern = "ool41*", .$cell_id)) %>% 
+  # kickout + ctrl (1000 droplets) & - ctrl (0 droplets)
+  filter(cell_id != "ool41_p1_a1",
+         cell_id != "ool41_p2_a1",
+         cell_id != "ool41_p1_h12",
+         cell_id != "ool41_p2_h12")
+```
+
+________________________________________
+
+## Figure S6b
+
+```{r}
+input_tpm <- ool41 %>%
+  filter(cell_id == "mef_5ng") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(input_tpm = log2_tpm)
+
+mef_bens_plot <- ool41_droplets %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+mef_bens_plot_model <- gam(percent ~ s(input_tpm, bs = "cs"), data = mef_bens_plot)
+mef_bens_plot_5ng <- mef_bens_plot %>% mutate(residuals = mef_bens_plot_model$residuals)
+
+bens_plot_5ng <- mef_bens_plot_5ng %>% 
+  ggplot(aes(x = input_tpm, y = percent)) +
+  geom_point(size = 3, pch = 21) +
+  geom_point(data = mef_bens_plot_5ng %>% filter(residuals > 30), color = "indianred4", size = 4, alpha = 0.4) +
+  stat_smooth(col = "red") +
+  labs(x = "Input mRNA amount\nlog2(TPM)", y = "Detected in x\ncoacervates [%]", title = "Input RNA amount: 5ng") +
+  ylim(c(0,100))
+plot(bens_plot_5ng)
+```
+
+## Figure S6c
+
+```{r}
+input_50pg <- ool41 %>%
+  filter(cell_id == "mef_50pg") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(input_tpm = log2_tpm)
+
+  mef_bens_plot <- ool41_droplets %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,input_50pg, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+
+# get residuals from model describing data in bens_plot
+mef_bens_plot_model <- gam(percent ~ s(input_tpm, bs = "cs"), data = mef_bens_plot)
+mef_bens_plot_50pg <- mef_bens_plot %>% mutate(residuals = mef_bens_plot_model$residuals)
+
+bens_plot_50pg <- mef_bens_plot_50pg %>% 
+  ggplot(aes(x = input_tpm, y = percent)) +
+  geom_point(size = 3, pch = 21) +
+  geom_point(data = mef_bens_plot_50pg %>% filter(residuals > 30), color = "indianred4", size = 4, alpha = 0.4) +
+  stat_smooth(col = "red") +
+  labs(x = "Input mRNA amount\nlog2(TPM)", y = "Detected in x\ncoacervates [%]", title = "Input RNA amount: 50pg") +
+  ylim(c(0,100))
+plot(bens_plot_50pg)
+```
+
+## Figure S6d
+
+```{r}
+test <- full_join(mef_bens_plot_5ng, mef_bens_plot_50pg, by = "target_id", suffix = c(".5ng", ".50pg")) %>%
+  drop_na() # to remove the genes which are only in one df -> will cause error when calc. pearson correl.
+
+# calc pearson correlation for residuals (5ng vs. 50pg)
+test_resid_rho <- paste("r = ", round(cor(test$residuals.5ng, test$residuals.50pg, method = "pearson"),2), sep = "")
+# calc pearson correlation for input_tpm (5ng vs. 50pg)
+test_input_rho <- paste("r = ", round(cor(test$input_tpm.50pg, test$input_tpm.5ng, method = "pearson"),2), sep = "")
+
+resid_comp <- test %>% 
+  ggplot(aes(x = residuals.5ng, residuals.50pg)) +
+  geom_point(size = 3, alpha = .7, shape = 21) +
+  geom_smooth(method = "lm") +
+  annotate(geom = 'text', label = test_resid_rho, x = -50, y = 75, hjust = -.0, vjust = 0, size = 7) +
+  labs(x = "Residuals\nInput RNA: 5ng", y = "Residuals\nInput RNA: 50pg", title = "Comparison of residuals")
+plot(resid_comp)
+```
+
+## Figure S6a
+
+```{r}
+input_tpm_comp <- test %>% 
+  ggplot(aes(x = input_tpm.5ng, y = input_tpm.50pg)) +
+  geom_point(size = 3, alpha = .7, shape = 21) +
+  geom_smooth(method = "lm") +
+  annotate(geom = 'text', label = test_input_rho, x = 2, y = 15, hjust = -.0, vjust = 0, size = 7) +
+  labs(x = "Input log2(TPM)\nRNA: 5ng", y = "Input log2(TPM)\nRNA: 50pg", title = "Comparison of Input RNA amount")
+plot(input_tpm_comp)
+```
+
+

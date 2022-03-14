@@ -1,0 +1,71 @@
+---
+title: "Figure 1"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+library(cowplot)
+
+theme_set(theme_classic(base_size=24))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r}
+# Load seq data
+master <- readRDS(file = "../_input/coacervate_data.RDS")
+```
+
+## Figure 1a
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./fig1a.png")
+plot(a_scheme)
+```
+
+## Figure 1b
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./fig1b.png")
+plot(a_scheme)
+```
+
+## Figure 1c
+
+```{r}
+master %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  filter(experiment == "ool17" | experiment == "ool18") %>% 
+  filter(tpm != 0) %>% 
+  group_by(new_cell_id) %>% 
+  summarise(mean_length = mean(length), 
+            FSC = FSC[1], SSC = SSC[1], 
+            num_trans = n()) %>% 
+  filter(FSC != is.na(FSC)) %>% 
+  ggplot(aes(y = num_trans, x = mean_length,  size = (FSC))) +
+  geom_point(alpha = .8, shape = 21) +
+  scale_fill_distiller(palette = "Spectral", name = "Ave RNA\nlength") +
+  stat_smooth(col = "indianred2", show.legend = FALSE) +
+  theme(legend.position = c(.8,.7),   legend.key.size = unit(.6, "cm"), legend.key.width = unit(.5,"cm"), 
+        legend.title = element_text(size = 22), legend.text = element_text(size = 20)) +
+  labs(y = "Number of transcripts", x = "Ave transcript length [bp]", size = "Coacervate\nsize [FSC]")
+```
+

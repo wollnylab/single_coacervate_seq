@@ -1,0 +1,171 @@
+---
+title: "Figure 4"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width=8, fig.height=7)
+```
+ 
+```{r}
+# SETUP
+library(tidyverse)
+library(ggcorrplot)
+library(cowplot)
+theme_set(theme_classic(base_size=24))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+## Figure 4a
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./fig4a.png")
+plot(a_scheme)
+```
+
+```{r}
+### Load data
+# coacervate data
+master_coac <- readRDS(file = "../_input/coacervate_data.RDS")
+# fus data
+master_fus <- readRDS(file = "../_input/fus_data.RDS")
+# dhh1 data
+master_dhh1 <- readRDS(file = "../_input/dhh1_data.RDS")
+
+### Format data
+# add information about droplet type
+master_coac <- master_coac %>% 
+  mutate(droplet_type = if_else(experiment == "ool17" | experiment == "ool18", "pdda", 
+                                if_else(experiment == "ool17_input" | experiment == "ool18_input" | experiment == "ool12_input", "input", "lys")))
+
+master_fus <- master_fus %>% 
+  mutate(droplet_type = if_else(experiment == "ool22", "fus", "input"))
+
+master_dhh1 <- master_dhh1 %>% 
+  mutate(droplet_type = if_else(experiment == "ool24_2", "dhh1", "input"))
+```
+
+Add read-coverage information
+
+```{r}
+### ---- ool12 ----
+
+# load coverage information from Lys data
+ool12_cov <- read.csv(file = "./_coverage/ool12_rel_coverage.csv", stringsAsFactors = F) %>% select(-X) %>% filter(V1 != "V1")
+
+# Format ool12_cov
+colnames(ool12_cov) <- c("cell_id", "target_id", "rel_coverage")
+
+master_lys_plus <- 
+  left_join(master_coac %>% filter(experiment == "ool12"), ool12_cov, by = c("cell_id", "target_id")) %>% 
+  mutate(rel_coverage = as.numeric(rel_coverage))
+
+### ---- ool24_2 ----
+
+# load coverage information from Dhh1 data
+ool24_2_cov <- read.csv(file = "./_coverage/ool24_2_rel_coverage.csv", stringsAsFactors = F) %>% select(-X) %>% filter(V1 != "V1")
+
+# Format ool24_2_cov
+colnames(ool24_2_cov) <- c("cell_id", "target_id", "rel_coverage")
+ool24_2_cov$cell_id[ool24_2_cov$cell_id == "OOL24V2P1H12"] <- "OOL24V2INPUT"
+
+master_dhh1_plus <- 
+  left_join(master_dhh1, ool24_2_cov, by = c("cell_id", "target_id")) %>% 
+  mutate(rel_coverage = as.numeric(rel_coverage))
+```
+
+Integrate datasets and make read-coverage cutoff
+
+```{r}
+pre_master <- bind_rows(master_lys_plus, master_fus, master_dhh1_plus,
+                        master_coac %>% filter(experiment %in% c("ool17", "ool17_input", "ool18", "ool18_input", "ool12_input"))) %>% 
+  mutate(rel_coverage = if_else(droplet_type == "pdda", 1, rel_coverage)) %>% 
+  mutate(rel_coverage = if_else(experiment == "ool22", 1, rel_coverage)) %>% 
+  mutate(rel_coverage = if_else(droplet_type == "input", 1, rel_coverage))
+master <- pre_master %>% filter(rel_coverage >= 0.2)
+saveRDS(master, file = "./master_cov_cutoff.RDS")
+```
+
+## Figure 4b
+
+```{r, fig.width=10, fig.height=10}
+# LYS data:
+c_ool12 <- master %>% 
+  filter(experiment == "ool12") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  mutate(ool12_percent = count*100/max(count)) %>% select(-count)
+
+# PDDA data:
+c_ool17 <- master %>% 
+  filter(experiment == "ool17") %>%
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  mutate(ool17_percent = count*100/max(count)) %>% select(-count)
+
+c_ool18 <- master %>% 
+  filter(experiment == "ool18") %>%
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  mutate(ool18_percent = count*100/max(count)) %>% select(-count)
+
+# FUS data:
+c_ool22 <- master %>% 
+  filter(experiment == "ool22") %>%
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  mutate(ool22_percent = count*100/max(count)) %>% select(-count)
+
+# Dhh1 data:
+c_ool24_2 <- master %>% 
+  filter(experiment == "ool24_2") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  mutate(ool24_2_percent = count*100/max(count)) %>% select(-count)
+
+# Combine all data
+c_all <- full_join(c_ool12, c_ool17, by='target_id') %>% 
+            full_join(., c_ool18, by='target_id') %>% 
+              full_join(., c_ool22, by='target_id') %>% 
+                full_join(., c_ool24_2, by='target_id') 
+
+# Calculate average between replicates (PDDA)
+c_all_sub <- c_all %>% drop_na() %>% 
+  mutate(ave_pdda = (ool17_percent+ool18_percent)/2) %>% 
+  select(-c(ool17_percent, ool18_percent)) %>% 
+  rename("PDDA\nDroplets" = ave_pdda, "Dhh1\nDroplets" = ool24_2_percent, "FUS\nDroplets" = ool22_percent, "Lysine\nDroplets" = ool12_percent)
+
+# convert to numeric for cor() function
+c_all_sub_numeric <- sapply(c_all_sub[,c(2:5)], as.numeric)
+
+# plot
+plot(c_all_sub[,c(2:5)], pch = 21, lower.panel = NULL, cex.axis=2, cex.labels = 1.5)
+
+```
+
+```{r}
+# generate correlation matrix
+c_all_sub_cor <- cor(c_all_sub_numeric, method = "pearson")
+
+# plot:
+ggcorrplot(c_all_sub_cor, hc.order = TRUE, type = "lower", outline.col = "white", lab = T) +
+  scale_fill_distiller(palette = "Spectral", limit = c(0.7,1), name = "Pearson\nCorrelation") 
+```

@@ -1,0 +1,86 @@
+---
+title: "Supplementary Figure 3"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+library(cowplot)
+library(gridExtra)
+
+theme_set(theme_classic(base_size=12))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+## Figure S3a
+
+```{r, fig.height=10}
+# read seq data
+master <- readRDS(file = "../_input/coacervate_data.RDS")
+
+# Question:
+# Does the plot in Fig 2c change if I look at different coacervate sizes
+new_data <- 
+  master %>% 
+  filter(experiment == "ool17" | experiment == "ool18" ) %>%  
+  filter(tpm != 0) %>% 
+  mutate(coac_size_bin = ntile(FSC, 6))
+
+p <- list()
+corr_df <- data_frame(bin = numeric(),
+                      corr = numeric())
+
+for (i in c(1:6)){
+  ool17_ave_tpm <- new_data %>%  
+    filter(experiment == "ool17") %>%  
+    filter(tpm != 0) %>%
+    filter(coac_size_bin == i) %>% 
+    group_by(target_id) %>%  
+    summarise(ave_tpm = mean(log2_tpm), CV = sd(log2_tpm)/mean(log2_tpm), length = length[1])
+  
+  ool18_ave_tpm <- new_data %>%
+    filter(experiment == "ool18") %>% 
+    filter(tpm != 0) %>% 
+    filter(coac_size_bin == i) %>% 
+    group_by(target_id) %>% 
+    summarise(ave_tpm = mean(log2_tpm), CV = sd(log2_tpm)/mean(log2_tpm), length = length[1])
+  
+  comb_ave_tpm <- left_join(ool17_ave_tpm, ool18_ave_tpm, by = "target_id") %>% drop_na()
+  s2c_model <- lm(ave_tpm.x ~ ave_tpm.y, comb_ave_tpm) 
+  s2c_rho <- cor(comb_ave_tpm$ave_tpm.x,comb_ave_tpm$ave_tpm.y)
+  corr_df[i,1] <- i
+  corr_df[i,2] <- s2c_rho
+  
+p[[i]] <- ggplot(data = comb_ave_tpm, aes(x = ave_tpm.x , y = ave_tpm.y)) +
+    geom_point(size = 3, alpha = .7, shape = 21) +
+    geom_density2d(binwidth = 0.002, colour = "blue", size = .8) +
+    geom_abline(intercept = 0, slope = 1, col = "red", size = 1) +
+    labs(x = "Ave. RNA amount in coacervates\nlog2(TPM) in Experiment A", y = "Ave. RNA amount in coacervates\nlog2(TPM) in Experiment B", title = paste("size bin = ", i, sep = "")) +
+    lims(y = c(0,16), x = c(0,16))
+}
+do.call(grid.arrange,p)
+```
+
+## Figure S3b
+
+```{r}
+barplot(corr_df$corr, names.arg = corr_df$bin, ylab = "pearson's correlation", xlab = "Coacervate size bins [FSC]")
+```

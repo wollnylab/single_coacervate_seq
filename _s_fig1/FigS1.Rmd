@@ -1,0 +1,162 @@
+---
+title: "Supplementary Figure 1"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(cowplot)
+
+theme_set(theme_classic(base_size=22))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+## Figure S1a
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./_scope/figs1a.png")
+plot(a_scheme)
+```
+
+Image quantification was done using ImageJ. The results of the quantification are provided in "./scope"
+
+```{r}
+# open data from image quantification
+img_count <- read.csv(file = "./_scope/quantification.csv", sep = ";") %>% select(-n) %>% as.tbl()
+
+# plot
+partcoeff_plot <- img_count %>% 
+  group_by(sample) %>% 
+  mutate(part_coeff = ave/mean(ave[background == "yes"])) %>% 
+  filter(background == "no",
+         sample == "iPSC_RNA_5ngul_PI_1_1000_60min_2" ) %>% 
+  ggplot(aes(x = sample, y = part_coeff, fill = sample)) +
+  geom_boxplot() +
+  geom_point(alpha = .7, size = 4, pch = 21) +
+  #coord_flip() +
+  labs(y = "Partition coefficient", x = "") +
+  theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.line.x = element_blank())
+
+plot(partcoeff_plot)
+print(paste("Number of droplets quantified:", 
+            img_count %>% filter(background == "no", sample == "iPSC_RNA_5ngul_PI_1_1000_60min_2" ) %>% nrow()))
+
+print(paste("Median Part Coeff:", 
+            img_count %>% 
+              group_by(sample) %>% 
+              mutate(part_coeff = ave/mean(ave[background == "yes"])) %>% 
+              filter(background == "no",
+                     sample == "iPSC_RNA_5ngul_PI_1_1000_60min_2" ) %>% 
+              pull(part_coeff) %>% 
+              median()
+            )
+      )
+
+```
+
+## Figure S1b
+
+```{r}
+b_facs1 <- ggdraw() + draw_image("./_facs/facs1.png")
+b_facs2 <- ggdraw() + draw_image("./_facs/facs2.png")
+figs1b <- plot_grid(b_facs1,b_facs2, ncol = 2)
+plot(figs1b)
+```
+
+## Figure S1c
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./_other/figs1c.png")
+plot(a_scheme)
+```
+
+## Figure S1d
+
+```{r}
+a_scheme <- ggdraw() + draw_image("./_other/figs1d.png")
+plot(a_scheme)
+```
+
+## Figure S1e
+
+```{r}
+x <- c(64340.3,49921.4,7770.1,8006.3,2144.8,1691.1,275.1,272.8,235.1,327.3,78.5)
+y <- c(1000,1000,100,100,10,10,1,1,1,1,0)
+
+x_name <- "molarity"
+y_name <- "num_coac"
+
+bioanalyzer_data <- data.frame(x,y)
+names(bioanalyzer_data) <- c(x_name,y_name)
+
+model <- lm(num_coac ~ molarity, bioanalyzer_data) 
+r2 <- summary(model)$r.squared
+
+bioanalyzer_data %>% 
+  ggplot(aes(x = (num_coac), y = molarity)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  annotate(geom = 'text', label = paste("R^2 = ", round(r2,2), sep=""), x = 12, y = 6e4, hjust = -.0, vjust = 0, size = 8) +
+  labs(y = "Molarity [pM]", x = "Number of sorted coacervates")
+```
+
+## Figure S1f
+
+```{r}
+bioanalyzer_data %>% 
+  filter(num_coac < 10) %>% 
+  ggplot(aes(x = as.factor(num_coac), y = molarity, fill = as.factor(num_coac))) +
+  geom_boxplot(show.legend = F) + 
+  geom_point(alpha = .7, size = 4, show.legend = F, pch = 21) +
+  expand_limits(y = 0) +
+  labs(y = "Molarity [pM]", x = "Number of\nsorted coacervates", title = "cDNA yield")
+```
+
+## Figure S1g
+
+```{r}
+# Load seq data
+master <- readRDS(file = "../_input/coacervate_data.RDS")
+
+# Prepare dataframe:
+figs1g_data <- master %>% 
+  filter(experiment == "ool17" | experiment == "ool18") %>% 
+  drop_na() %>% 
+  filter(tpm != 0) %>% 
+  group_by(experiment, cell_id) %>%
+  summarise(n = n(), FSC = FSC[1], SSC = SSC[1], p_pseudoaligned[1], experiment[1], log2_FSC = log2(FSC[1])) %>% 
+  filter(n < 7000)
+
+# Calc correlation
+fig1c_m <- lm(n ~ log2_FSC, figs1g_data) 
+fig1c_r2 <- as.character(paste("R^2 =", round(summary(fig1c_m)$r.squared, 3), sep = " "))
+fig1c_pears <- paste("r = ", round(cor(figs1g_data$log2_FSC, figs1g_data$n), 2), sep = "")
+
+
+# Plot:
+fig1c_plot <- ggplot(data = figs1g_data, aes(x = log2_FSC, y = n)) +
+  geom_point(size = 4, alpha = .7, shape = 21) +
+  stat_smooth(method = "lm", col = "indianred2")  +
+  #scale_x_continuous(trans = "log10") +
+  annotate(geom = 'text', label = fig1c_pears, x = min(figs1g_data$log2_FSC), y = max(figs1g_data$n), hjust = -.1, vjust = 1, size = 6) +
+  #xlim(c(0,3e5)) +
+  labs(x = "Condensate size\nlog2(FSC)", y = "Number of\ndetected transcripts") 
+plot(fig1c_plot)
+```

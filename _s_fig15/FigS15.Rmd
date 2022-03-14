@@ -1,0 +1,372 @@
+---
+title: "Supplementary Figure 15"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r}
+# Setup
+library(tidyverse)
+library(Seurat)
+library(mgcv)
+library(RColorBrewer)
+library(reshape2)
+library(biomaRt)
+library(ggrepel)
+```
+
+
+```{r}
+### Load data that include read coverage cutoff
+master <- readRDS(file = "../_fig4/master_cov_cutoff.RDS")
+```
+
+```{r}
+### Create input files for Seurat object #########
+##################################################
+
+######### First, get outlier transcripts for each experiment: #########
+
+# ---- ool22 ----
+fus_input_tpm <- master %>%
+  filter(experiment == "ool22_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(fus_input_tpm = log2_tpm)
+fus_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool22") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,fus_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+# get residuals from model describing data in bens_plot
+fus_bens_plot_model <- gam(percent ~ s(fus_input_tpm, bs = "cs"), data = fus_bens_plot)
+fus_outliers <- fus_bens_plot %>% mutate(residuals = fus_bens_plot_model$residuals) %>% filter(residuals > 30) %>% pull(target_id)
+# Scaled & normalized data for outliers only
+norm_scale_fus_data <- master %>% filter(experiment == "ool22" | experiment == "ool22_input") %>% 
+  filter(target_id %in% fus_outliers) %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  dplyr::select(new_cell_id, target_id, experiment, tpm) %>% 
+  mutate(trans_tpm = log2(tpm+1)) %>% 
+  filter(trans_tpm != 0) %>% 
+  group_by(target_id) %>% 
+  # if a gene does not exist in the input -> set to 1:
+  mutate(dummy_col = ifelse(any(grepl("ool22_input", experiment)), trans_tpm[experiment == "ool22_input"], 1)) %>% 
+  # filter out genes that occur only once (cannot scale them):
+  mutate(count_transc = n()) %>% 
+  filter(count_transc != 1) %>% 
+  # normalize
+  mutate(norm_tpm = trans_tpm/dummy_col) %>% 
+  # scale
+  mutate_at("norm_tpm", funs(scale(.))) %>% 
+  # clean up
+  filter(experiment != "ool22_input") %>% 
+  dplyr::select(new_cell_id, target_id, norm_tpm)
+
+
+# ---- ool24_2 ----
+dhh1_input_tpm <- master %>%
+  filter(experiment == "ool24_2_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(dhh1_input_tpm = log2_tpm)
+dhh1_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool24_2") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,dhh1_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+# get residuals from model describing data in bens_plot
+dhh1_bens_plot_model <- gam(percent ~ s(dhh1_input_tpm, bs = "cs"), data = dhh1_bens_plot)
+dhh1_outliers <- dhh1_bens_plot %>% mutate(residuals = dhh1_bens_plot_model$residuals) %>% filter(residuals > 30) %>% pull(target_id)
+# Scaled & normalized data for outliers only
+norm_scale_dhh1_data <- master %>% filter(experiment == "ool24_2" | experiment == "ool24_2_input") %>% 
+  filter(target_id %in% dhh1_outliers) %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  dplyr::select(new_cell_id, target_id, experiment, tpm) %>% 
+  mutate(trans_tpm = log2(tpm+1)) %>% 
+  filter(trans_tpm != 0) %>% 
+  group_by(target_id) %>% 
+  # if a gene does not exist in the input -> set to 1:
+  mutate(dummy_col = ifelse(any(grepl("ool24_2_input", experiment)), trans_tpm[experiment == "ool24_2_input"], 1)) %>% 
+  # filter out genes that occur only once (cannot scale them):
+  mutate(count_transc = n()) %>% 
+  filter(count_transc != 1) %>% 
+  # normalize
+  mutate(norm_tpm = trans_tpm/dummy_col) %>% 
+  # scale
+  mutate_at("norm_tpm", funs(scale(.))) %>% 
+  # clean up
+  filter(experiment != "ool24_2_input") %>% 
+  dplyr::select(new_cell_id, target_id, norm_tpm)
+
+# ---- ool17 ----
+pdda1_input_tpm <- master %>%
+  filter(experiment == "ool17_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(pdda1_input_tpm = log2_tpm)
+pdda1_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool17") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,pdda1_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+# get residuals from model describing data in bens_plot
+pdda1_bens_plot_model <- gam(percent ~ s(pdda1_input_tpm, bs = "cs"), data = pdda1_bens_plot)
+pdda1_outliers <- pdda1_bens_plot %>% mutate(residuals = pdda1_bens_plot_model$residuals) %>% filter(residuals > 30) %>% pull(target_id)
+# Scaled & normalized data for outliers only
+norm_scale_pdda1_data <- master %>% filter(experiment == "ool17" | experiment == "ool17_input") %>% 
+  filter(target_id %in% pdda1_outliers) %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  dplyr::select(new_cell_id, target_id, experiment, tpm) %>% 
+  mutate(trans_tpm = log2(tpm+1)) %>% 
+  filter(trans_tpm != 0) %>% 
+  group_by(target_id) %>% 
+  # if a gene does not exist in the input -> set to 1:
+  mutate(dummy_col = ifelse(any(grepl("ool17_input", experiment)), trans_tpm[experiment == "ool17_input"], 1)) %>% 
+  # filter out genes that occur only once (cannot scale them):
+  mutate(count_transc = n()) %>% 
+  filter(count_transc != 1) %>% 
+  # normalize
+  mutate(norm_tpm = trans_tpm/dummy_col) %>% 
+  # scale
+  mutate_at("norm_tpm", funs(scale(.))) %>% 
+  # clean up
+  filter(experiment != "ool17_input") %>% 
+  dplyr::select(new_cell_id, target_id, norm_tpm)
+
+# ---- ool18 ----
+pdda2_input_tpm <- master %>%
+  filter(experiment == "ool18_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(pdda2_input_tpm = log2_tpm)
+pdda2_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool18") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,pdda2_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+# get residuals from model describing data in bens_plot
+pdda2_bens_plot_model <- gam(percent ~ s(pdda2_input_tpm, bs = "cs"), data = pdda2_bens_plot)
+pdda2_outliers <- pdda2_bens_plot %>% mutate(residuals = pdda2_bens_plot_model$residuals) %>% filter(residuals > 30) %>% pull(target_id)
+# Scaled & normalized data for outliers only
+norm_scale_pdda2_data <- master %>% filter(experiment == "ool18" | experiment == "ool18_input") %>% 
+  filter(target_id %in% pdda2_outliers) %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  dplyr::select(new_cell_id, target_id, experiment, tpm) %>% 
+  mutate(trans_tpm = log2(tpm+1)) %>% 
+  filter(trans_tpm != 0) %>% 
+  group_by(target_id) %>% 
+  # if a gene does not exist in the input -> set to 1:
+  mutate(dummy_col = ifelse(any(grepl("ool18_input", experiment)), trans_tpm[experiment == "ool18_input"], 1)) %>% 
+  # filter out genes that occur only once (cannot scale them):
+  mutate(count_transc = n()) %>% 
+  filter(count_transc != 1) %>% 
+  # normalize
+  mutate(norm_tpm = trans_tpm/dummy_col) %>% 
+  # scale
+  mutate_at("norm_tpm", funs(scale(.))) %>% 
+  # clean up
+  filter(experiment != "ool18_input") %>% 
+  dplyr::select(new_cell_id, target_id, norm_tpm)
+
+# ---- ool12 ----
+lys_input_tpm <- master %>%
+  filter(experiment == "ool12_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(lys_input_tpm = log2_tpm)
+lys_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool12") %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = mean(log2_tpm), count = n()) %>% 
+  inner_join(.,lys_input_tpm, by="target_id") %>% distinct() %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/max(count)) 
+# get residuals from model describing data in bens_plot
+lys_bens_plot_model <- gam(percent ~ s(lys_input_tpm, bs = "cs"), data = lys_bens_plot)
+lys_outliers <- lys_bens_plot %>% mutate(residuals = lys_bens_plot_model$residuals) %>% filter(residuals > 30) %>% pull(target_id)
+# Scaled & normalized data for outliers only
+norm_scale_lys_data <- master %>% filter(experiment == "ool12" | experiment == "ool12_input") %>% 
+  filter(target_id %in% lys_outliers) %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  dplyr::select(new_cell_id, target_id, experiment, tpm) %>% 
+  mutate(trans_tpm = log2(tpm+1)) %>% 
+  filter(trans_tpm != 0) %>% 
+  group_by(target_id) %>% 
+  # if a gene does not exist in the input -> set to 1:
+  mutate(dummy_col = ifelse(any(grepl("ool12_input", experiment)), trans_tpm[experiment == "ool12_input"], 1)) %>% 
+  # filter out genes that occur only once (cannot scale them):
+  mutate(count_transc = n()) %>% 
+  filter(count_transc != 1) %>% 
+  # normalize
+  mutate(norm_tpm = trans_tpm/dummy_col) %>% 
+  # scale
+  mutate_at("norm_tpm", funs(scale(.))) %>% 
+  # clean up
+  filter(experiment != "ool12_input") %>% 
+  dplyr::select(new_cell_id, target_id, norm_tpm)
+  
+
+######### Second, combine all outliers data: #########
+master_outliers <- bind_rows(norm_scale_lys_data, norm_scale_pdda1_data, norm_scale_pdda2_data, norm_scale_fus_data, norm_scale_dhh1_data)
+
+
+# Cast data into matrix format
+master_cast <- acast(master_outliers, target_id~new_cell_id)
+master_cast[is.na(master_cast)] = 0
+
+# Create metadata for Seurat object
+master_meta <- master %>% 
+  mutate(new_cell_id = paste(cell_id, experiment, sep = "_")) %>% 
+  filter(droplet_type != "input") %>% 
+  dplyr::select(new_cell_id, experiment, FSC, p_pseudoaligned, droplet_type) %>% 
+  distinct() %>% 
+  #left_join(., num_genes, by = "new_cell_id") %>% 
+  #left_join(., master_avel_avegc, by = "new_cell_id") %>%  
+  mutate(droplet_type=replace(droplet_type, droplet_type=="pdda", "PDDA")) %>% 
+  mutate(droplet_type=replace(droplet_type, droplet_type=="lys", "Lysine")) %>% 
+  mutate(droplet_type=replace(droplet_type, droplet_type=="dhh1", "Dhh1")) %>% 
+  mutate(droplet_type=replace(droplet_type, droplet_type=="fus", "FUS")) 
+
+# Use cell_id as row.names
+row.names(master_meta) <- master_meta[,1]
+master_meta <- master_meta %>% dplyr::select(-new_cell_id)
+
+# Create Seurat Object
+master_seurat <- CreateSeuratObject(counts = master_cast, min.cells = 3, meta.data = master_meta)
+```
+
+### Normalize and scale data
+
+Note: `variable genes` instead of `all.genes` was used for subsequent analysis. Data was not normalized
+
+```{r}
+# Scale data
+all.genes <- rownames(master_seurat)
+master_seurat[["RNA"]]@scale.data <- master_cast 
+```
+
+### PCA & Clustering: <u>5 PCs</u>
+
+PCA: `features = all.genes`
+
+FindNeighbors: `dims = 1:5`
+
+FindClusters: `resolution = 0.6`
+
+FSC = droplet size
+
+```{r}
+# PCA analysis: use variable genes
+master_seurat <- RunPCA(master_seurat, features = all.genes)
+
+# Clustering
+master_seurat <- FindNeighbors(master_seurat, dims = 1:5)
+master_seurat <- FindClusters(master_seurat, resolution = 0.6)
+
+# UMAP
+master_seurat <- RunUMAP(master_seurat, dims = 1:5)
+```
+
+
+```{r}
+# Plotting
+
+DimPlot(master_seurat, reduction = "umap", group.by = "droplet_type",  pt.size = 3, cols = brewer.pal(n = 4, name = "RdBu")) +
+  scale_fill_distiller(name = "Condensate\ntype") +
+  theme_classic(base_size = 24) +
+  theme(legend.position = c(0.93, 0.9), legend.key.size = unit(.6, "cm"), legend.text = element_text(size = 20),
+        axis.title = element_blank(), axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank()) +
+  labs(title = "Condensate type")
+
+
+FeaturePlot(object = master_seurat, features = "FSC", pt.size = 3) +
+  scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "Spectral")), values = rev(c(1.0,0.5,0.3,0.2,0.1,0))) +
+  theme_classic(base_size = 24) +
+  theme(legend.position = c(0.9 ,0.9), legend.key.size = unit(.6, "cm"), legend.key.width = unit(.3,"cm"), 
+        axis.title = element_blank(), axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank()) +
+  labs(title = "Condensate size [FSC]")
+
+```
+
+### DE analysis between clusters found in UMAP plot
+#### Analysis by Zhisong He
+
+<u>Note</u>:
+
+Ensembl server was done at the time of knitting the markdown. Hence, we could not get the DE plot. Will change ASAP.
+
+```{r, eval=F}
+# Analysis by Zhisong He:
+master_seurat$group <- ifelse(master_seurat$droplet_type %in% c("FUS","PDDA"),1,2)
+DE <- FindMarkers(master_seurat, group.by="group", ident.1=1, ident.2=2, logfc.threshold = 0, min.pct = 0, min.cells.feature = 0, min.cells.group = 0, pseudocount.use = 0)
+DE$diff <- (Matrix::rowMeans(master_seurat@assays$RNA@data[,which(master_seurat$group==1)]) - Matrix::rowMeans(master_seurat@assays$RNA@data[,which(master_seurat$group==2)]))[rownames(DE)]
+
+write.table(DE[,-c(2)], file="./DE_droplettypes.tsv", quote=F, sep="\t")
+
+# The rest in my mess
+test <- read.table(file = "./DE_droplettypes.tsv", row.names = NULL) %>%
+  rename("target_id" = "row.names") %>% 
+  as.tbl()
+
+# Format target_id for biomaRt
+test[,1] <- gsub("\\..*","",test$target_id)
+
+# Function to get transcript names
+mart <- biomaRt::useDataset(dataset = "hsapiens_gene_ensembl",
+                            mart    = useMart("ENSEMBL_MART_ENSEMBL",
+                                              host    = "www.ensembl.org"))
+
+GetGeneNames <- function(df){
+  ensembl_list <- dplyr::select(df, target_id)
+  gene_names <- getBM(filters = "ensembl_transcript_id",
+                      attributes = c("ensembl_transcript_id",
+                                     "external_gene_name"), 
+                      values = ensembl_list, mart = mart, verbose = T)
+  colnames(gene_names) <- c("target_id", "gene_name")
+  return(gene_names)
+}
+
+# Get gene names for target_ids
+gene_names <- GetGeneNames(test)
+de_genes <- test %>% left_join(., gene_names, by = "target_id")
+
+# plot
+de_genes %>% 
+  ggplot(aes(y = -log10(p_val_adj), x = diff)) +
+  geom_point(color = "grey", size = 3) +
+  geom_point(data = de_genes %>% filter(p_val_adj < 0.01), colour = "black", size = 3) +
+  geom_vline(xintercept = 0, linetype = 2) +
+  geom_label_repel(data = de_genes %>% filter(p_val_adj < 0.01), aes(label = gene_name), nudge_y = .5) +
+  labs(x="dTPM(FUS/PDDA) - dTPM(Dhh1/Lysine)", y="-Log10(P-bonferroni)")
+```
+

@@ -1,0 +1,114 @@
+---
+title: "Supplementary Figure 13"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r}
+# Setup
+library(tidyverse)
+library(ggcorrplot)
+
+# coacervate data
+master_coac <- readRDS(file = "../_input/coacervate_data.RDS")
+# fus data
+master_fus <- readRDS(file = "../_input/fus_data.RDS")
+# dhh1 data
+master_dhh1 <- readRDS(file = "../_input/dhh1_data.RDS")
+
+
+### Format data
+# add information about droplet type
+master_coac <- master_coac %>% 
+  mutate(droplet_type = if_else(experiment == "ool17" | experiment == "ool18", "pdda", 
+                                if_else(experiment == "ool17_input" | experiment == "ool18_input" | experiment == "ool12_input", "input", "lys")))
+master_fus <- master_fus %>% 
+  mutate(droplet_type = if_else(experiment == "ool22", "fus", "input"))
+
+master_dhh1 <- master_dhh1 %>% 
+  mutate(droplet_type = if_else(experiment == "ool24_2", "dhh1", "input"))
+
+# Integrate datasets
+master <- bind_rows(master_coac, master_fus, master_dhh1)
+```
+
+## Figure S13
+
+```{r, fig.width=10, fig.height=10}
+# LYS data:
+c_ool9 <- master %>% 
+  filter(experiment == "ool9_input") %>% 
+  filter(tpm != 0) %>% 
+  select(target_id, log2_tpm)
+
+c_ool12 <- master %>% 
+  filter(experiment == "ool12_input") %>% 
+  filter(tpm != 0) %>% 
+  select(target_id, log2_tpm)
+
+# PDDA data:
+c_ool17 <- master %>% 
+  filter(experiment == "ool17_input") %>%
+  filter(tpm != 0) %>% 
+  select(target_id, log2_tpm)
+
+c_ool18 <- master %>% 
+  filter(experiment == "ool18_input") %>%
+  filter(tpm != 0) %>% 
+  select(target_id, log2_tpm)
+
+# FUS data:
+c_ool22 <- master %>% 
+  filter(experiment == "ool22_input") %>%
+  filter(tpm != 0) %>% 
+  select(target_id, log2_tpm)
+
+# Dhh1 data:
+c_ool24_2 <- master %>% 
+  filter(experiment == "ool24_2_input") %>% 
+  filter(tpm != 0) %>% 
+  select(target_id, log2_tpm)
+
+# Combine all data
+c_all <- full_join(c_ool12, c_ool17, by='target_id') %>% 
+  full_join(., c_ool18, by='target_id') %>% 
+  full_join(., c_ool22, by='target_id') %>% 
+  full_join(., c_ool24_2, by='target_id') 
+
+# Calculate average between replicates (LYS, PDDA)
+c_all_sub <- c_all %>% drop_na() %>% 
+  rename(lysine = log2_tpm.x, pdda_1 = log2_tpm.y, pdda_2 = log2_tpm.x.x, fus = log2_tpm.y.y, dhh1 = log2_tpm)
+
+# convert to numeric for cor() function
+c_all_sub_numeric <- sapply(c_all_sub[,c(2:6)], as.numeric)
+
+# plot
+plot(c_all_sub[,c(2:6)], pch = 21, lower.panel = NULL, main = "Input TPM")
+```
+
+```{r}
+# generate correlation matrix
+c_all_sub_cor <- cor(c_all_sub_numeric, method = "pearson")
+
+# plot
+ggcorrplot(c_all_sub_cor, hc.order = TRUE, type = "lower", outline.col = "white", lab = T) +
+  scale_fill_distiller(palette = "Spectral", limit = c(0.5,1)) +
+  labs(title = "Pearson Correlation of Input TPM")
+```

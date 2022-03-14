@@ -1,0 +1,88 @@
+---
+title: "Supplementary Figure 5"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+
+theme_set(theme_classic(base_size=24))
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r, fig.width=10}
+# Get MEF data
+ool41 <- readRDS(file = "../_input/mef_data.RDS") %>% as.tbl()
+ool41_droplets <- ool41 %>% 
+  as.tbl() %>% 
+  filter(grepl(pattern = "ool41*", .$cell_id)) %>% 
+  # kickout + ctrl (1000 droplets) & - ctrl (0 droplets)
+  filter(cell_id != "ool41_p1_a1",
+         cell_id != "ool41_p2_a1",
+         cell_id != "ool41_p1_h12",
+         cell_id != "ool41_p2_h12")
+
+# Get length of ERCCs
+ercc_length <- read.csv(file = "~/PD/Data/OoL/41_mef_rna_droplets/ercc_seqs.txt", sep = "\t") %>% 
+  as.tbl() %>% 
+  select(ERCC_ID, Sequence) %>% 
+  rename(target_id = ERCC_ID) %>% 
+  mutate(length = nchar(as.character(Sequence))) %>% 
+  select(-Sequence)
+
+# load ERCC concentrations
+ercc <- read.csv(file = "~/PD/Data/OoL/41_mef_rna_droplets/ercc_spike_ins.txt", sep = "\t") %>% 
+  as.tbl() %>% 
+  rename(conc_mix1 = concentration.in.Mix.1..attomoles.ul., 
+         conc_mix2 = concentration.in.Mix.2..attomoles.ul., 
+         target_id = ERCC.ID) %>% 
+  # add actual concentration in soup
+  mutate(conc_fM = conc_mix1/80) %>% 
+  # add length information
+  left_join(., ercc_length, by = "target_id")
+
+# correlate ERCC concentration with percent droplets the transcripts were found in
+ercc_plot <- ool41_droplets %>% 
+  filter(tpm != 0) %>% 
+  filter(grepl(pattern = "ERCC.*", x = .$target_id)) %>% 
+  group_by(target_id) %>% 
+  summarise(ave_tpm = median(log2_tpm), deviation = sd(log2_tpm), count = n()) %>% 
+  arrange(desc(count)) %>% 
+  mutate(percent = count*100/130) %>% 
+  right_join(., ercc %>% select(target_id, conc_fM, length), by = "target_id") %>%
+  replace(is.na(.), 0) 
+
+# calc pearson correlation between concentration and percent
+ercc_rho <- paste("r = ", round(cor(ercc_plot$percent, ercc_plot$conc_fM, method = "pearson"),2), sep = "")
+
+# plot
+ercc_final_plot <- ercc_plot %>% 
+  ggplot(aes(y = percent, x = conc_fM, size = length)) +
+  geom_point(data = ercc_plot %>% filter(percent != 0), fill = "indianred1", alpha = .7, pch = 21) +
+  geom_point(data = ercc_plot %>% filter(percent == 0), fill = "lightgrey", alpha = .7, pch = 21) +
+  geom_smooth(show.legend = FALSE) +
+  annotate(geom = 'text', label = ercc_rho, x = .1, y = 75, hjust = -.0, vjust = 0, size = 7) +
+  annotate(geom = 'text', label = "1 fM", x = .9, y = 40, hjust = -.0, vjust = 0, size = 7, angle = 90, color = "red") +
+  geom_vline(xintercept = 1, linetype = 2, color = "red") +
+  scale_x_log10() +
+  labs(title = "Synthetic RNA pool", x = "ERCC concentration [fM]", y = "Detected in x\ncoacervates [%]") 
+plot(ercc_final_plot)
+```

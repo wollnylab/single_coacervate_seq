@@ -1,0 +1,322 @@
+---
+title: "Figure 3"
+author: "Damian Wollny"
+output:
+  html_document:
+    theme: paper
+    df_print: kable
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+library(Rmpfr)
+library(mgcv)
+library(RColorBrewer)
+library(seqinr)
+library(Biostrings)
+
+theme_set(theme_classic(base_size=22))
+
+# --- colors for this figure
+
+# color: "spectral"
+fig3_cols <- brewer.pal(n = 10, name = "Spectral")
+fig3_cols[5] <- "#fdcc3f"
+fig3_cols[6] <- "#d5ee52"
+
+# function to make colors transparent
+makeTransparent = function(..., alpha=0.5) {
+  if(alpha<0 | alpha>1) stop("alpha must be between 0 and 1")
+  alpha = floor(255*alpha)  
+  newColor = col2rgb(col=unlist(list(...)), alpha=FALSE)
+  .makeTransparent = function(col, alpha) {
+    rgb(red=col[1], green=col[2], blue=col[3], alpha=alpha, maxColorValue=255)
+  }
+  newColor = apply(newColor, 2, .makeTransparent, alpha=alpha)
+  return(newColor)
+}
+
+```
+
+<style type="text/css">
+
+body, td {
+   font-size: 18px;
+}
+</style>
+
+```{r}
+# Load seq data
+master <- readRDS(file = "../_input/coacervate_data.RDS")
+```
+
+## Figure 3a
+
+```{r}
+# --- OOL17 replicate ------------------
+
+ool17_input_tpm <- master %>%
+  filter(experiment == "ool17_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(input_tpm = log2_tpm)
+
+ool17_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool17") %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  left_join(ool17_input_tpm, ., by="target_id") %>% 
+  mutate(count = replace(count, which(is.na(count)), 0)) %>% # include all transcripts that are found in 0 coac
+  mutate(percent = count*100/max(count)) 
+
+# --- OOL18 replicate ------------------
+
+ool18_input_tpm <- master %>%
+  filter(experiment == "ool18_input") %>% 
+  filter(tpm != 0) %>% 
+  group_by(target_id) %>% 
+  summarise(input_tpm = log2_tpm)
+
+ool18_bens_plot <- master %>% 
+  filter(tpm != 0) %>% 
+  filter(experiment == "ool18") %>% 
+  group_by(target_id) %>% 
+  summarise(count = n()) %>% 
+  left_join(ool18_input_tpm, ., by="target_id") %>% 
+  mutate(count = replace(count, which(is.na(count)), 0)) %>% # include all transcripts that are found in 0 coac
+  mutate(percent = count*100/max(count)) 
+
+# --- Ave ------------------
+
+# Filter all transcripts that are present in both replicate experiments
+ave_bens_plot <- inner_join(ool17_bens_plot, ool18_bens_plot, by = "target_id")
+
+# Calc ave(input_tpm) and ave(percent) for each transcript
+ave_bens_plot <- ave_bens_plot %>% 
+  mutate(input_tpm = (input_tpm.x+input_tpm.y)/2) %>% 
+  mutate(percent = (percent.x+percent.y)/2) %>% 
+  select(target_id, input_tpm, percent) 
+
+# get residuals from model describing data in bens_plot
+ave_bens_plot_model <- gam(percent ~ s(input_tpm, bs = "cs"), data = ave_bens_plot)
+ave_bens_plot <- ave_bens_plot %>% mutate(residuals = ave_bens_plot_model$residuals)
+
+# plot
+fig3a <- ggplot(data = ave_bens_plot, aes(x = input_tpm, y = percent)) +
+  geom_point(size = 3, alpha = .7, shape = 21) +
+  geom_point(data = ave_bens_plot %>% filter(residuals > 30), color = fig3_cols[1], size = 4, alpha = 0.4) +
+  stat_smooth(col = "indianred2") +
+  scale_y_continuous(limits = c(0,105)) +
+  labs(x = "Input mRNA amount\nlog2(TPM)", y = "Detected in x\ncondensates [%]")
+plot(fig3a)
+```
+
+## Figure 3b
+
+In order to obtain the input data for this figure, MEME was run as described in the manuscript (see Materials & Methods - Code in ./_meme/ ). The MEME output was then parsed using the custom python script './_meme/meme_parser_simple.py' which can be found in this folder.
+
+```{r}
+# Several tricks had to be used to work with very small numbers (E-values)
+# 1.) colClasses of the e_values had to be converted to a character when reading csv
+# 2.) mpfr function from the Rmpfr package needed to be used to read the small numbers. Takes char as input
+# 3.) mpfr output was log converted and transformed into numeric
+
+test <- read.csv(file = "./_meme/enr_meme.csv", colClasses = c("e_value" = "character"))
+test$e_value <- as.numeric(log(mpfr(test$e_value)))
+test$e_value <- test$e_value*-1
+
+# convert 'motif' column to factor and reorder levels according to e_value (for plotting)
+test$motif <- factor(test$motif, levels = reorder(test$motif,test$e_value))
+
+# define colors (for plottting)
+fig3b1_cols = makeTransparent(fig3_cols, alpha = 0.7)
+# plot:
+
+fig3b1 <- ggplot(data = test, aes(x=motif, y=e_value, fill = motif)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,1300)) +
+  scale_fill_manual(values=fig3b1_cols) +
+  scale_x_discrete(breaks=c(as.character(test$motif)), labels=c(1:10)) +
+  theme(legend.position = "none",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_text(angle = 90, hjust = .5, size = 24))
+
+fig3b1_axis <- ggplot(data = test, aes(x=motif, y=e_value, fill = motif)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,1300)) +
+  scale_fill_manual(values=fig3b1_cols) +
+  scale_x_discrete(breaks=c(as.character(test$motif)), labels=c(1:10)) +
+  theme(legend.position = "none") +
+  labs(x = "Motifs from\nenriched transcripts", y = "Motif enrichment")
+plot(fig3b1_axis)
+
+
+# --- meme output for random transcripts ---------
+
+meme_random <- read.csv(file = "./_meme/rand_meme.csv", colClasses = c("e_value" = "character"))
+meme_random$e_value <- as.numeric(log(mpfr(meme_random$e_value)))
+meme_random$e_value <- meme_random$e_value*-1
+
+# convert 'motif' column to factor and reorder levels according to e_value (for plotting)
+meme_random$motif <- factor(meme_random$motif, levels = reorder(meme_random$motif,meme_random$e_value))
+
+# define colors (for plotting)
+fig3b2_cols = rep("grey",10)
+
+# plot:
+fig3b2 <- ggplot(data = meme_random, aes(x=motif, y=e_value, fill = motif)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,1300)) +
+  scale_fill_manual(values=fig3b2_cols) +
+  theme(legend.position = "none",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_text(angle = 90, hjust = .5, size = 24))
+
+fig3b2_axis <- ggplot(data = meme_random, aes(x=motif, y=e_value, fill = motif)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_y_continuous(expand = c(0,0), limits = c(0,1300)) +
+  scale_fill_manual(values=fig3b2_cols) +
+  scale_x_discrete(breaks=c(as.character(meme_random$motif)), labels=c(1:10)) +
+  theme(legend.position = "none") +
+  labs(x = "Motifs from\nrandom transcripts", y = "Motif enrichment")
+
+plot(fig3b2_axis)
+```
+
+## Figure 3c
+
+For this analysis, MAST output was obtained as described in the manuscript (see Materials & Methods - Code in ./_mast/ folder). MAST output was parsed using the 'mast_parser.py' script.
+
+```{r}
+# read mast analysis for ave_pdda_M1 using e_val cutoff 0.05
+motif1_test <- readRDS(file = "./_mast/_enr/ave_pdda_m1.RDS")
+# read mast analysis for ave_pdda_random using e_val cutoff 0.05
+motif1_test.1 <- readRDS(file = "./_mast/_rand/ave_pdda_random.RDS")
+
+
+fig3c <- ave_bens_plot %>% inner_join(.,motif1_test.1, by = "target_id") %>% 
+  mutate(index = if_else(count == 2, 3, if_else(strand == "+", 1, 2))) %>% 
+  ggplot(aes(x = percent, color = as.factor(index))) +
+  geom_density(aes(fill = as.factor(index)), alpha = 0.2, size = .7) +
+  geom_density(data = ave_bens_plot %>% anti_join(.,motif1_test.1, by = "target_id") %>% mutate(index = 0), aes(fill = as.factor(index)), alpha = 0.2, size = .7) +
+  scale_color_manual(values=c( "darkgrey", fig3_cols[1], fig3_cols[2], "black"), 
+                     breaks=c("0","1", "2", "3"),
+                     labels=c("No Motif", "Motif: 1", "Motif: 2", "Motif: 1 + 2")) +
+  scale_fill_manual(values = c("white", "white", "white", "grey")) +
+  scale_x_continuous(trans = "log10") +
+  labs(x = "Detected in x\ncondensates [%]") +
+  theme(legend.title = element_blank(), legend.position = c(0.25,0.91)) +
+  guides(fill=FALSE)
+
+plot(fig3c)
+```
+
+## Figure 3d
+
+For the pairwise alignment analysis of each transcrip with it's reverse complement, we used the sequences for all transcripts (e.g. ./_sw_analysis/pdda_input_rand_seqs.txt) and ran a script to get local pairwise alignment (e.g. ./_sw_analysis/pdda_pairwise_alignment_cluster_both.R) on a cluster. The output was then combined in a .RDS file which was the input for this figure.
+
+```{r, fig.width=9}
+comb <- readRDS(file = "./_sw_analysis/comb_data.RDS")
+
+# convert 'transcripts' col to factor and change level for facet labels
+comb$transcripts <- as.factor(comb$transcripts)
+levels(comb$transcripts) <- c("enriched vs enriched", "enriched vs random", "random vs random")
+
+# histogram: distribution of SW-scores
+fig3d <- ggplot(data = comb, aes(value)) +
+  geom_histogram(aes(fill = transcripts), bins = 50) +
+  facet_grid(. ~ transcripts) +
+  scale_fill_manual(values = c(fig3_cols[1], "darkgrey", "darkgrey")) +
+  scale_y_continuous(trans = "log10", expand = c(0,0)) +
+  xlim(c(0,2100)) +
+  geom_segment(aes(x = 510, y = 1, xend = 510, yend = 1e4), linetype = 2, color = "black") +
+  labs(x = "RNA-RNA complementarity score") +
+  theme(legend.position = "none", strip.text.x = element_text(size = 18), 
+        axis.text.x = element_text(size = 18, angle = 45, vjust = .6))
+
+plot(fig3d)
+```
+
+## Figure 3e
+
+SINE/ALU sequences were obtained from Repbase:
+https://www.girinst.org/server/RepBase/index.php
+
+Among the files the humsub.ref was used to get the SINE sequences (can be found in ./sines). Sequences of individual motifs discovered by MEME were parsed using the script "./sines/meme_parser_get_ind_motifs.py"
+
+```{r, fig.width=20, fig.height=10}
+# function to get the reverse complement of given seq
+get_reverse_compl <- function(seq){
+  reverse(chartr("ATGC","TACG",seq))  
+}
+
+# Read Sine sequences obtained from RepBase
+sines <- read.fasta("./_sines/humsub_gatc.fa")
+
+# Parse fasta into df
+sine_df <- data.frame(sine = character(),
+                      sine_seq = character(),
+                      stringsAsFactors=FALSE)
+
+for (i in 1:length(sines)){
+  sine_df[i,1] <- names(sines[i])
+  sine_df[i,2] <- toupper(c2s(sines[[i]]))
+}
+
+# Read individual motifs from meme analysis - ENRICHED
+ind_motifs_enr <- read.csv(file = "./_sines/meme_ind_motifs.csv")
+ind_motifs_enr_top <- ind_motifs_enr %>% 
+  group_by(motif_number) %>% 
+  filter(row_number() <= 5) %>% 
+  modify_if(is.factor, as.character) %>% 
+  as.data.frame() %>% 
+  mutate(rc_motif_seqs = get_reverse_compl(motif_seqs))
+
+# Define output df
+output_df <- data.frame(sine = character(),
+                        motif = character(),
+                        align_score = numeric(),
+                        motif_source = character(),
+                        stringsAsFactors = FALSE)
+
+# Setup Substitution matrix for alignment
+sigma <- nucleotideSubstitutionMatrix(match = 2, mismatch = -1, baseOnly = TRUE)
+
+x = 0
+for (j in 1:nrow(sine_df)){
+  for (n in 1:nrow(ind_motifs_enr_top)) {
+    x = x + 1
+    output_df[x,1] <- sine_df$sine[j] 
+    output_df[x,2] <- ind_motifs_enr_top[n,1]
+    output_df[x,3] <- pairwiseAlignment(sine_df[j,2], as.character(ind_motifs_enr_top[n,2]), substitutionMatrix = sigma, gapOpening = -10,
+                      gapExtension = 0, scoreOnly = TRUE)
+    output_df[x,4] <- "enriched"
+  }
+}
+
+# plot
+output_df %>% 
+  filter(motif_source == "enriched") %>% 
+  mutate(motif = factor(motif, levels = rev(c("MEME-1", "MEME-2", "MEME-3", "MEME-4", "MEME-5",
+                                          "MEME-6", "MEME-7", "MEME-8", "MEME-9", "MEME-10")))) %>% 
+  group_by(sine,motif) %>% 
+  summarise(ave_score = mean(align_score)) %>% 
+  ggplot(aes(x = sine, y = motif, fill = ave_score)) +
+  geom_tile(color = "white") +
+  scale_fill_distiller(palette="Blues", direction=1, values = rev(c(1.0,0.8,0.75,0.7,0.6,0))) +
+  theme(axis.text.x = element_text(angle = 90))
+
+```
