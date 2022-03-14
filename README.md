@@ -2,7 +2,7 @@
 
 _____________________________________________
 
-<img src="_fig1/fig1a.png" align="center" />
+<img src="Figures/_fig1/fig1a.png" align="center" />
 
 _____________________________________________
 
